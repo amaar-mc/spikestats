@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spikestats"
+version = "0.1.0"
+description = "Spike-train statistics (firing rate, CV, CV2, Fano factor, local variation Lv and LvR) in pure Python with zero dependencies."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Amaar Chughtai" }]
+keywords = [
+  "spike-train",
+  "neuroscience",
+  "computational-neuroscience",
+  "neuromorphic",
+  "firing-rate",
+  "fano-factor",
+  "coefficient-of-variation",
+  "local-variation",
+  "point-process",
+  "spiking-neural-networks",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "hypothesis>=6"]
+
+[project.urls]
+Homepage = "https://github.com/amaar-mc/spikestats"
+Repository = "https://github.com/amaar-mc/spikestats"
+Issues = "https://github.com/amaar-mc/spikestats/issues"
+Changelog = "https://github.com/amaar-mc/spikestats/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spikestats"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
