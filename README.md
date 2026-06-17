@@ -1,5 +1,9 @@
 # spikestats
 
+<p align="center">
+  <img src="assets/logo.png" alt="spikestats logo" width="160">
+</p>
+
 Spike-train statistics in pure Python, with zero dependencies.
 
 `spikestats` computes the standard measures of spike-train rate and variability from a plain
