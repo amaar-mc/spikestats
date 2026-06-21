@@ -32,12 +32,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Zero-mean bins in `time_resolved_fano`: returned as `float('nan')` so callers can identify
   and exclude them.
 
-### Not included in this release
-
-- PyPI publish is queued behind the new-project-creation quota (currently returning 429 for new
-  packages). The sdist and wheel are twine-verified in `dist/`; upload will proceed once the
-  quota resets.
-
 ## [0.1.0]
 
 ### Added

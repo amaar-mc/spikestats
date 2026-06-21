@@ -115,8 +115,6 @@ Parameters after `*` are keyword-only and have no default values; pass them expl
 - `time_resolved_fano` uses population variance (denominator N). With a single trial, variance
   is 0 for every bin; use multiple trials to get meaningful Fano estimates. Bins where the
   mean count is 0 across all trials are returned as `float('nan')`.
-- PyPI publish is queued behind the new-project-creation quota (currently returning 429 for new
-  packages). The dist is twine-verified and ready; upload will proceed once the quota resets.
 
 ## License
 
