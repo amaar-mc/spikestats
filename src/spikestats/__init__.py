@@ -9,6 +9,7 @@ from .metrics import (
     lv,
     lvr,
     spike_counts,
+    spike_time_tiling_coefficient,
 )
 from .time_resolved import (
     binned_spike_counts,
@@ -28,7 +29,8 @@ __all__ = [
     "lvr",
     "psth",
     "spike_counts",
+    "spike_time_tiling_coefficient",
     "time_resolved_fano",
     "time_resolved_rate",
 ]
-__version__ = "0.2.0"
+__version__ = "0.3.0"

@@ -29,3 +29,20 @@ def require_spikes(n_spikes: int, minimum: int, metric: str) -> None:
             f"{metric} needs at least {minimum} spikes "
             f"({minimum - 1} intervals), received {n_spikes}"
         )
+
+
+def check_interval(name: str, interval: tuple[float, float]) -> tuple[float, float]:
+    """Validate a recording interval `(start, end)`: both finite and `start < end`.
+
+    Returns the interval as a tuple of floats for downstream use.
+    """
+    start, end = interval
+    start = float(start)
+    end = float(end)
+    if not isfinite(start) or not isfinite(end):
+        raise ValueError(f"{name} bounds must both be finite, received {interval!r}")
+    if start >= end:
+        raise ValueError(
+            f"{name} must be a (start, end) pair with start < end, received {interval!r}"
+        )
+    return start, end

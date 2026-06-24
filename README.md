@@ -8,9 +8,10 @@ Spike-train statistics in pure Python, with zero dependencies.
 
 `spikestats` computes the standard measures of spike-train rate and variability from a plain
 list of spike times: firing rate, inter-spike intervals, coefficient of variation, CV2,
-local variation (Lv and the refractory-corrected LvR), spike counts, and the Fano factor.
-There is nothing to configure and nothing to install beyond the package itself: the input
-is a `list[float]` of spike times and the output is a `float`.
+local variation (Lv and the refractory-corrected LvR), spike counts, the Fano factor, and the
+spike-time tiling coefficient (STTC) for pairwise correlation. There is nothing to configure
+and nothing to install beyond the package itself: the input is a `list[float]` of spike times
+and the output is a `float`.
 
 It pairs with [spikegen](https://github.com/amaar-mc/spikegen) for generating trains and
 [spikedist](https://github.com/amaar-mc/spikedist) for comparing them. The three share the
@@ -45,6 +46,19 @@ ss.lv(spikes)                          # Shinomoto et al. 2003 local variation
 ss.lvr(spikes, refractory=0.002)       # Shinomoto et al. 2009, refractory-corrected
 ss.spike_counts(spikes, duration=0.2, bin_width=0.05)
 ss.fano_factor(spikes, duration=0.2, bin_width=0.05)
+```
+
+### Pairwise correlation
+
+```python
+import spikestats as ss
+
+a = [0.012, 0.058, 0.110, 0.155]  # seconds
+b = [0.015, 0.061, 0.300]         # seconds
+
+# Spike-time tiling coefficient (Cutts and Eglen 2014): firing-rate-robust correlation
+# of two trains over a recording interval, with a synchronicity window dt.
+ss.spike_time_tiling_coefficient(a, b, dt=0.005, interval=(0.0, 0.2))
 ```
 
 ### Time-resolved metrics
@@ -84,6 +98,13 @@ All functions take spike times as a sequence of numbers and sort them internally
 - `spike_counts(spikes, *, duration, bin_width)`: counts per equal-width bin tiling `[0, n * bin_width)`.
 - `fano_factor(spikes, *, duration, bin_width)`: population variance of the bin counts over their mean.
 
+### Pairwise metrics
+
+- `spike_time_tiling_coefficient(spikes_a, spikes_b, *, dt, interval)`: spike-time tiling
+  coefficient (Cutts and Eglen 2014). `interval` is a `(start, end)` recording window and `dt`
+  is the synchronicity window. Returns a value in `[-1, 1]`; identical trains give 1.0, and the
+  measure is symmetric and robust to differing firing rates. Empty trains return 0.0.
+
 ### Time-resolved metrics
 
 All functions use the half-open boundary `[0, duration)`: a spike at exactly `duration` is excluded.
@@ -115,6 +136,10 @@ Parameters after `*` are keyword-only and have no default values; pass them expl
 - `time_resolved_fano` uses population variance (denominator N). With a single trial, variance
   is 0 for every bin; use multiple trials to get meaningful Fano estimates. Bins where the
   mean count is 0 across all trials are returned as `float('nan')`.
+- `spike_time_tiling_coefficient` requires every spike to lie within the closed `interval`
+  `[start, end]`; a spike outside raises a `ValueError`. Following the Cutts and Eglen
+  convention, when a denominator `1 - P * T` is zero (for example when `dt` is large enough that
+  the tiling saturates to 1), that half of the STTC contributes 0. An empty train gives 0.0.
 
 ## License
 

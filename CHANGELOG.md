@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-23
+
+### Added
+
+- `spike_time_tiling_coefficient(spikes_a, spikes_b, *, dt, interval) -> float`: spike-time
+  tiling coefficient (Cutts and Eglen 2014, J Neurosci), a firing-rate-robust pairwise
+  correlation of two spike trains. `dt` is the synchronicity window and `interval` is the
+  recording window as an explicit `(start, end)` pair. Returns a value in `[-1, 1]`; identical
+  trains give 1.0 and the measure is symmetric.
+
+### Design notes
+
+- Recording interval: passed as an explicit `(start, end)` keyword argument (no default),
+  validated by a new `check_interval` helper requiring finite bounds and `start < end`. Every
+  spike must lie within the closed interval `[start, end]` or a `ValueError` is raised. The
+  tiling fractions TA and TB clip each `[t - dt, t + dt]` window to the interval before taking
+  the union, so they measure covered time over total recording time.
+- Zero-denominator convention: when `1 - P * T` is zero (for example a saturating `dt` where
+  TA or TB reaches 1), that half-term contributes 0, following Cutts and Eglen.
+- Empty trains: an STTC involving an empty train is defined as 0.0.
+
 ## [0.2.0]
 
 ### Added

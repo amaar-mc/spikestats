@@ -10,7 +10,13 @@ from collections.abc import Sequence
 from itertools import pairwise
 from statistics import mean, pstdev, pvariance
 
-from ._validate import check_non_negative, check_positive, require_spikes, sorted_finite
+from ._validate import (
+    check_interval,
+    check_non_negative,
+    check_positive,
+    require_spikes,
+    sorted_finite,
+)
 
 
 def inter_spike_intervals(spikes: Sequence[float]) -> list[float]:
@@ -138,3 +144,110 @@ def fano_factor(spikes: Sequence[float], *, duration: float, bin_width: float) -
     if m == 0:
         raise ValueError("fano_factor is undefined when no spikes fall in the binned window")
     return float(pvariance(counts) / m)
+
+
+def _spikes_in_interval(
+    spikes: Sequence[float], start: float, end: float, name: str
+) -> list[float]:
+    """Sort spikes and reject any time outside the closed recording interval [start, end]."""
+    times = sorted_finite(spikes)
+    for t in times:
+        if t < start or t > end:
+            raise ValueError(
+                f"{name} spike time {t!r} lies outside the recording interval "
+                f"[{start!r}, {end!r}]"
+            )
+    return times
+
+
+def _tiled_fraction(times: list[float], dt: float, start: float, end: float) -> float:
+    """Fraction of [start, end] covered by the union of [t - dt, t + dt] over `times`.
+
+    Each window is clipped to the recording interval before the union is measured, so the
+    result is the covered time divided by the total recording time (in [0, 1]).
+    """
+    if not times:
+        return 0.0
+    total = end - start
+    covered = 0.0
+    current_start = max(start, times[0] - dt)
+    current_end = min(end, times[0] + dt)
+    for t in times[1:]:
+        window_start = max(start, t - dt)
+        window_end = min(end, t + dt)
+        if window_start <= current_end:
+            current_end = max(current_end, window_end)
+        else:
+            covered += current_end - current_start
+            current_start = window_start
+            current_end = window_end
+    covered += current_end - current_start
+    return covered / total
+
+
+def _fraction_near(reference: list[float], target: list[float], dt: float) -> float:
+    """Fraction of `reference` spikes within +/- dt of any spike in `target`.
+
+    Both inputs are sorted; uses a two-pointer sweep so the cost is linear in the train
+    lengths. Returns 0.0 when `reference` is empty.
+    """
+    if not reference:
+        return 0.0
+    if not target:
+        return 0.0
+    near = 0
+    j = 0
+    n_target = len(target)
+    for t in reference:
+        while j < n_target and target[j] < t - dt:
+            j += 1
+        if j < n_target and target[j] <= t + dt:
+            near += 1
+    return near / len(reference)
+
+
+def spike_time_tiling_coefficient(
+    spikes_a: Sequence[float],
+    spikes_b: Sequence[float],
+    *,
+    dt: float,
+    interval: tuple[float, float],
+) -> float:
+    """Spike-time tiling coefficient (STTC) of two trains (Cutts and Eglen 2014).
+
+    The STTC is a firing-rate-robust pairwise correlation measure. With a synchronicity
+    window `dt` and a recording `interval` given as `(start, end)`:
+
+    - TA is the fraction of the total recording time within +/- dt of any spike in A;
+      TB is the same for B.
+    - PA is the fraction of spikes in A that lie within +/- dt of any spike in B;
+      PB is the fraction of spikes in B that lie within +/- dt of any spike in A.
+    - STTC = 0.5 * ((PA - TB) / (1 - PA * TB) + (PB - TA) / (1 - PB * TA)).
+
+    When a denominator `1 - P * T` is zero, that half-term contributes 0 (the Cutts and
+    Eglen convention). When either train is empty, the STTC is defined to be 0.0, since the
+    correlation between a train and an empty train is undefined and conventionally reported
+    as zero. The result lies in `[-1, 1]`; identical trains give 1.0.
+
+    `dt` must be positive. `interval` must be a `(start, end)` pair with `start < end`, and
+    every spike must lie within the closed interval `[start, end]`. STTC is symmetric:
+    `spike_time_tiling_coefficient(A, B, ...)` equals `spike_time_tiling_coefficient(B, A, ...)`.
+    """
+    check_positive("dt", dt)
+    start, end = check_interval("interval", interval)
+    times_a = _spikes_in_interval(spikes_a, start, end, "spikes_a")
+    times_b = _spikes_in_interval(spikes_b, start, end, "spikes_b")
+
+    if not times_a or not times_b:
+        return 0.0
+
+    tile_a = _tiled_fraction(times_a, dt, start, end)
+    tile_b = _tiled_fraction(times_b, dt, start, end)
+    prop_a = _fraction_near(times_a, times_b, dt)
+    prop_b = _fraction_near(times_b, times_a, dt)
+
+    denominator_a = 1.0 - prop_a * tile_b
+    denominator_b = 1.0 - prop_b * tile_a
+    half_a = 0.0 if denominator_a == 0.0 else (prop_a - tile_b) / denominator_a
+    half_b = 0.0 if denominator_b == 0.0 else (prop_b - tile_a) / denominator_b
+    return 0.5 * (half_a + half_b)

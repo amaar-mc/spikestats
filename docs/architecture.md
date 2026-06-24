@@ -55,6 +55,26 @@ binned window are ignored, so every bin has the same width. `fano_factor` return
 mean, so the Fano factor is 1 in expectation; a regular train binned at an integer number of
 spikes per bin gives 0.
 
+## Spike-time tiling coefficient
+
+`spike_time_tiling_coefficient` measures the pairwise correlation of two trains A and B over a
+recording interval `[start, end]` with a synchronicity window `dt` (Cutts and Eglen 2014). Let
+`TA` be the fraction of the total recording time that lies within `+/- dt` of any spike in A
+(the union of the windows `[t - dt, t + dt]`, each clipped to the interval, divided by the
+total recording time), and `TB` the same for B. Let `PA` be the fraction of spikes in A within
+`+/- dt` of some spike in B, and `PB` the fraction of spikes in B within `+/- dt` of some spike
+in A. Then
+
+`STTC = 0.5 * ((PA - TB) / (1 - PA * TB) + (PB - TA) / (1 - PB * TA))`.
+
+Because each term is normalised by the tiling fraction `T`, the measure is robust to differences
+in firing rate, unlike a raw coincidence count. The value lies in `[-1, 1]`; identical trains
+give 1 and uncorrelated trains give approximately 0. When a denominator `1 - P * T` is zero (for
+example a `dt` large enough that `TA` or `TB` saturates to 1), that half-term contributes 0,
+following the Cutts and Eglen convention. An STTC involving an empty train is defined as 0. The
+interval is supplied as an explicit `(start, end)` pair, validated for finite bounds with
+`start < end`, and every spike must lie inside the closed interval.
+
 ## Why pure Python
 
 The statistics are short and standard, and the standard library `statistics` module provides
@@ -70,3 +90,5 @@ spikegen and consumed by spikedist.
   neurons. Neural Computation.
 - S. Shinomoto et al. (2009). Relating neuronal firing patterns to functional differentiation
   of cerebral cortex. PLoS Computational Biology.
+- C. Cutts, S. Eglen (2014). Detecting pairwise correlations in spike trains: an objective
+  comparison of methods and application to the study of retinal waves. Journal of Neuroscience.

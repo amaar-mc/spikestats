@@ -42,9 +42,16 @@ def summarize(name: str, spikes: list[float], duration: float) -> None:
 
 def main() -> None:
     duration = 20.0
-    summarize("regular 50 Hz", regular_train(50.0, duration), duration)
+    regular = regular_train(50.0, duration)
+    poisson = poisson_train(50.0, duration, seed=0)
+    summarize("regular 50 Hz", regular, duration)
     print()
-    summarize("Poisson 50 Hz", poisson_train(50.0, duration, seed=0), duration)
+    summarize("Poisson 50 Hz", poisson, duration)
+    print()
+    sttc = ss.spike_time_tiling_coefficient(
+        regular, poisson, dt=0.002, interval=(0.0, duration)
+    )
+    print(f"STTC(regular, Poisson, dt=2 ms): {sttc:.3f}")
 
 
 if __name__ == "__main__":

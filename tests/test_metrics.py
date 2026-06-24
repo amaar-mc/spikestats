@@ -12,6 +12,7 @@ from spikestats import (
     lv,
     lvr,
     spike_counts,
+    spike_time_tiling_coefficient,
 )
 
 
@@ -133,6 +134,73 @@ class TestFanoFactor:
     def test_no_spikes_in_window_raises(self) -> None:
         with pytest.raises(ValueError, match="no spikes"):
             fano_factor([], duration=3.0, bin_width=1.0)
+
+
+class TestSpikeTimeTilingCoefficient:
+    def test_identical_trains_is_one(self) -> None:
+        spikes = [1.0, 2.0, 3.0, 7.0]
+        assert spike_time_tiling_coefficient(
+            spikes, spikes, dt=0.05, interval=(0.0, 10.0)
+        ) == pytest.approx(1.0)
+
+    def test_worked_example(self) -> None:
+        # A = [1.0, 5.0], B = [1.2, 8.0], dt = 0.5, interval (0, 10).
+        # TA: union of [0.5,1.5] and [4.5,5.5] = 2.0 / 10 = 0.2.
+        # TB: union of [0.7,1.7] and [7.5,8.5] = 2.0 / 10 = 0.2.
+        # PA: A spike 1.0 is within 0.5 of B spike 1.2 (yes); 5.0 is not => 1/2 = 0.5.
+        # PB: B spike 1.2 is within 0.5 of A spike 1.0 (yes); 8.0 is not => 1/2 = 0.5.
+        # STTC = 0.5 * ((0.5 - 0.2)/(1 - 0.5*0.2) + (0.5 - 0.2)/(1 - 0.5*0.2))
+        #      = 0.5 * (0.3/0.9 + 0.3/0.9) = 1/3.
+        a = [1.0, 5.0]
+        b = [1.2, 8.0]
+        assert spike_time_tiling_coefficient(
+            a, b, dt=0.5, interval=(0.0, 10.0)
+        ) == pytest.approx(1.0 / 3.0)
+
+    def test_no_coincidences_is_negative(self) -> None:
+        # A = [1.0], B = [9.0], dt = 0.5, interval (0, 10).
+        # TA = 1.0/10 = 0.1, TB = 1.0/10 = 0.1, PA = 0, PB = 0.
+        # STTC = 0.5 * ((0 - 0.1)/(1 - 0) + (0 - 0.1)/(1 - 0)) = -0.1.
+        assert spike_time_tiling_coefficient(
+            [1.0], [9.0], dt=0.5, interval=(0.0, 10.0)
+        ) == pytest.approx(-0.1)
+
+    def test_symmetry(self) -> None:
+        a = [1.0, 3.5, 6.2, 9.1]
+        b = [1.3, 3.4, 7.0]
+        ab = spike_time_tiling_coefficient(a, b, dt=0.4, interval=(0.0, 10.0))
+        ba = spike_time_tiling_coefficient(b, a, dt=0.4, interval=(0.0, 10.0))
+        assert ab == pytest.approx(ba)
+
+    def test_saturating_dt_gives_zero(self) -> None:
+        # dt large enough that both windows cover the whole interval => TA = TB = 1.
+        # Every spike is within dt of every other spike => PA = PB = 1.
+        # Each half-term has denominator 1 - 1*1 = 0, so contributes 0 => STTC = 0.
+        a = [2.0, 4.0]
+        b = [6.0, 8.0]
+        assert spike_time_tiling_coefficient(
+            a, b, dt=10.0, interval=(0.0, 10.0)
+        ) == pytest.approx(0.0)
+
+    def test_empty_train_returns_zero(self) -> None:
+        assert spike_time_tiling_coefficient(
+            [], [1.0, 2.0], dt=0.5, interval=(0.0, 10.0)
+        ) == 0.0
+        assert spike_time_tiling_coefficient(
+            [], [], dt=0.5, interval=(0.0, 10.0)
+        ) == 0.0
+
+    def test_non_positive_dt_raises(self) -> None:
+        with pytest.raises(ValueError, match="dt"):
+            spike_time_tiling_coefficient([1.0], [2.0], dt=0.0, interval=(0.0, 10.0))
+
+    def test_bad_interval_raises(self) -> None:
+        with pytest.raises(ValueError, match="interval"):
+            spike_time_tiling_coefficient([1.0], [2.0], dt=0.5, interval=(10.0, 0.0))
+
+    def test_spike_outside_interval_raises(self) -> None:
+        with pytest.raises(ValueError, match="outside the recording interval"):
+            spike_time_tiling_coefficient([11.0], [2.0], dt=0.5, interval=(0.0, 10.0))
 
 
 class TestPoissonAsymptotics:
