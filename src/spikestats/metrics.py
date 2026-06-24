@@ -8,6 +8,7 @@ docstrings; see docs/architecture.md for the references.
 
 from collections.abc import Sequence
 from itertools import pairwise
+from math import ceil, floor
 from statistics import mean, pstdev, pvariance
 
 from ._validate import (
@@ -251,3 +252,103 @@ def spike_time_tiling_coefficient(
     half_a = 0.0 if denominator_a == 0.0 else (prop_a - tile_b) / denominator_a
     half_b = 0.0 if denominator_b == 0.0 else (prop_b - tile_a) / denominator_b
     return 0.5 * (half_a + half_b)
+
+
+def _correlogram_bins(bin_width: float, max_lag: float) -> int:
+    """Number of lag bins on each side of zero: ceil(max_lag / bin_width).
+
+    Validates that `bin_width` and `max_lag` are positive and that `max_lag` is at least
+    one bin wide, then returns the half-width count `n`. The full correlogram has `2 * n + 1`
+    bins (an odd number, with one bin centered exactly on lag zero).
+    """
+    check_positive("bin_width", bin_width)
+    check_positive("max_lag", max_lag)
+    if max_lag < bin_width:
+        raise ValueError(
+            f"max_lag {max_lag!r} must be at least one bin of width {bin_width!r}"
+        )
+    return ceil(max_lag / bin_width)
+
+
+def cross_correlogram(
+    reference: Sequence[float],
+    target: Sequence[float],
+    *,
+    bin_width: float,
+    max_lag: float,
+) -> list[int]:
+    """Binned cross-correlogram (CCG) of two spike trains.
+
+    For every spike in `reference` and every spike in `target`, the lag is
+    `target_time - reference_time`. Each lag is histogrammed into one of `2 * n + 1`
+    symmetric bins, where `n = ceil(max_lag / bin_width)`. The bins are centered on lag
+    zero: bin index `k` (for `k` in `0 .. 2 * n`) covers the half-open lag interval
+
+        [(k - n - 0.5) * bin_width, (k - n + 0.5) * bin_width),
+
+    so the central bin (index `n`) covers `[-bin_width / 2, +bin_width / 2)` and is centered
+    exactly on lag zero. A lag is counted when it falls inside this bin grid, i.e. inside
+    `[-(n + 0.5) * bin_width, +(n + 0.5) * bin_width)`; lags outside are ignored. Because
+    `n = ceil(max_lag / bin_width)`, the grid always covers at least `[-max_lag, max_lag]`.
+
+    `bin_width` and `max_lag` must both be positive and `max_lag` must be at least one
+    `bin_width`. Either train may be empty, in which case there are no pairs and every bin
+    is zero.
+
+    Returns a list of `2 * n + 1` non-negative integer counts, ordered from the most
+    negative lag bin to the most positive. The sign convention is `target - reference`, so
+    `cross_correlogram(a, b)` reversed equals `cross_correlogram(b, a)`.
+    """
+    n = _correlogram_bins(bin_width, max_lag)
+    counts = [0] * (2 * n + 1)
+    ref_times = sorted_finite(reference)
+    tgt_times = sorted_finite(target)
+    for r in ref_times:
+        for t in tgt_times:
+            # Nearest-bin index via floor(x + 0.5); the +0.5 places half-open bin edges at
+            # odd multiples of bin_width / 2, matching the documented bin intervals.
+            index = floor((t - r) / bin_width + 0.5) + n
+            if 0 <= index <= 2 * n:
+                counts[index] += 1
+    return counts
+
+
+def autocorrelogram(
+    spikes: Sequence[float],
+    *,
+    bin_width: float,
+    max_lag: float,
+) -> list[int]:
+    """Binned autocorrelogram (ACG) of a spike train: its CCG with itself.
+
+    The lag of every ordered pair of distinct spikes `(i, j)` with `i != j` is
+    `spikes[j] - spikes[i]`, histogrammed using the same symmetric bin grid as
+    `cross_correlogram`: `2 * n + 1` bins with `n = ceil(max_lag / bin_width)`, the central
+    bin centered on lag zero. The trivial zero-lag self-pairs `i == j` are excluded (the
+    standard ACG convention), so the central bin counts only genuine pairs of distinct
+    spikes whose lag falls within `[-bin_width / 2, +bin_width / 2)`, not the `N` self
+    coincidences.
+
+    Because every ordered pair `(i, j)` with `i != j` has a mirror pair `(j, i)` of the
+    opposite lag, the ACG is symmetric: `acg == acg` reversed.
+
+    `bin_width` and `max_lag` must both be positive and `max_lag` must be at least one
+    `bin_width`. A train with fewer than two spikes has no distinct pairs, so every bin is
+    zero.
+
+    Returns a list of `2 * n + 1` non-negative integer counts, ordered from the most
+    negative lag bin to the most positive.
+    """
+    n = _correlogram_bins(bin_width, max_lag)
+    counts = [0] * (2 * n + 1)
+    times = sorted_finite(spikes)
+    n_spikes = len(times)
+    for i in range(n_spikes):
+        a = times[i]
+        for j in range(n_spikes):
+            if i == j:
+                continue
+            index = floor((times[j] - a) / bin_width + 0.5) + n
+            if 0 <= index <= 2 * n:
+                counts[index] += 1
+    return counts

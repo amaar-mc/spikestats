@@ -3,6 +3,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from spikestats import (
+    autocorrelogram,
+    cross_correlogram,
     cv2,
     cv_isi,
     firing_rate,
@@ -90,6 +92,44 @@ def test_sttc_is_symmetric(a: list[float], b: list[float], dt: float) -> None:
     ab = spike_time_tiling_coefficient(a, b, dt=dt, interval=(0.0, 1.0))
     ba = spike_time_tiling_coefficient(b, a, dt=dt, interval=(0.0, 1.0))
     assert ab == pytest.approx(ba)
+
+
+# Correlogram property tests. Trains are drawn from [0, 1] with a fixed bin grid.
+corr_train = st.lists(
+    st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
+    min_size=0,
+    max_size=40,
+)
+
+
+@given(corr_train, corr_train)
+def test_ccg_length_is_odd_and_counts_nonnegative(a: list[float], b: list[float]) -> None:
+    result = cross_correlogram(a, b, bin_width=0.05, max_lag=0.5)
+    assert len(result) % 2 == 1
+    assert all(c >= 0 for c in result)
+
+
+@given(corr_train, corr_train)
+def test_ccg_reversed_equals_swapped(a: list[float], b: list[float]) -> None:
+    ab = cross_correlogram(a, b, bin_width=0.05, max_lag=0.5)
+    ba = cross_correlogram(b, a, bin_width=0.05, max_lag=0.5)
+    assert ab == list(reversed(ba))
+
+
+@given(corr_train)
+def test_acg_is_symmetric(spikes: list[float]) -> None:
+    acg = autocorrelogram(spikes, bin_width=0.05, max_lag=0.5)
+    assert acg == list(reversed(acg))
+
+
+@given(corr_train)
+def test_acg_central_bin_has_no_self_pairs(spikes: list[float]) -> None:
+    # The ACG equals the self-CCG with the N self-pairs (all in the central bin) removed,
+    # so the ACG central bin is the self-CCG central bin minus the spike count.
+    acg = autocorrelogram(spikes, bin_width=0.05, max_lag=0.5)
+    ccg = cross_correlogram(spikes, spikes, bin_width=0.05, max_lag=0.5)
+    center = len(ccg) // 2
+    assert acg[center] == ccg[center] - len(spikes)
 
 
 @given(

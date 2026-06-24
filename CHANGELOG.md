@@ -4,6 +4,34 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-06-24
+
+### Added
+
+- `cross_correlogram(reference, target, *, bin_width, max_lag) -> list[int]`: binned
+  cross-correlogram (CCG). For every spike in `reference` and every spike in `target`, the
+  lag `target_time - reference_time` is histogrammed into symmetric bins. Returns
+  `2 * n + 1` integer counts with `n = ceil(max_lag / bin_width)`, ordered from the most
+  negative lag bin to the most positive. The sign convention is `target - reference`, so
+  `cross_correlogram(a, b)` reversed equals `cross_correlogram(b, a)`.
+- `autocorrelogram(spikes, *, bin_width, max_lag) -> list[int]`: binned autocorrelogram
+  (ACG), the CCG of a train with itself over the same symmetric bin grid. The trivial
+  zero-lag self-pairs `i == i` are excluded, so the central bin counts only genuine pairs
+  of distinct spikes. The ACG is symmetric.
+
+### Design notes
+
+- Bin convention: `n = ceil(max_lag / bin_width)` bins on each side of zero, for `2 * n + 1`
+  bins total. Bin `k` covers the half-open lag interval
+  `[(k - n - 0.5) * bin_width, (k - n + 0.5) * bin_width)`, so the central bin (index `n`)
+  covers `[-bin_width / 2, +bin_width / 2)` and is centered exactly on lag zero. A lag is
+  counted when it falls inside the grid, i.e. `[-(n + 0.5) * bin_width, +(n + 0.5) * bin_width)`,
+  which always covers at least `[-max_lag, max_lag]`.
+- Validation: `bin_width` and `max_lag` must both be positive and `max_lag` must be at least
+  one `bin_width`, otherwise a `ValueError` is raised.
+- Empty or single-spike trains: the CCG of any train with an empty train, and the ACG of a
+  train with fewer than two spikes, have no pairs, so every bin is zero.
+
 ## [0.3.0] - 2026-06-23
 
 ### Added

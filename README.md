@@ -8,8 +8,9 @@ Spike-train statistics in pure Python, with zero dependencies.
 
 `spikestats` computes the standard measures of spike-train rate and variability from a plain
 list of spike times: firing rate, inter-spike intervals, coefficient of variation, CV2,
-local variation (Lv and the refractory-corrected LvR), spike counts, the Fano factor, and the
-spike-time tiling coefficient (STTC) for pairwise correlation. There is nothing to configure
+local variation (Lv and the refractory-corrected LvR), spike counts, the Fano factor, the
+spike-time tiling coefficient (STTC), and the cross- and autocorrelogram (CCG and ACG) for
+pairwise coincidence structure. There is nothing to configure
 and nothing to install beyond the package itself: the input is a `list[float]` of spike times
 and the output is a `float`.
 
@@ -59,6 +60,14 @@ b = [0.015, 0.061, 0.300]         # seconds
 # Spike-time tiling coefficient (Cutts and Eglen 2014): firing-rate-robust correlation
 # of two trains over a recording interval, with a synchronicity window dt.
 ss.spike_time_tiling_coefficient(a, b, dt=0.005, interval=(0.0, 0.2))
+
+# Cross-correlogram: histogram of lags (target - reference) in symmetric bins centered on
+# zero. Returns 2 * ceil(max_lag / bin_width) + 1 integer counts, most-negative lag first.
+ss.cross_correlogram(a, b, bin_width=0.005, max_lag=0.05)
+
+# Autocorrelogram: the train's CCG with itself, excluding the trivial i == i self-pairs.
+# Symmetric by construction; peaks appear at multiples of the train's ISI.
+ss.autocorrelogram(a, bin_width=0.005, max_lag=0.05)
 ```
 
 ### Time-resolved metrics
@@ -104,6 +113,17 @@ All functions take spike times as a sequence of numbers and sort them internally
   coefficient (Cutts and Eglen 2014). `interval` is a `(start, end)` recording window and `dt`
   is the synchronicity window. Returns a value in `[-1, 1]`; identical trains give 1.0, and the
   measure is symmetric and robust to differing firing rates. Empty trains return 0.0.
+- `cross_correlogram(reference, target, *, bin_width, max_lag) -> list[int]`: binned
+  cross-correlogram (CCG). Histograms the lag `target_time - reference_time` of every spike
+  pair into `2 * n + 1` symmetric bins with `n = ceil(max_lag / bin_width)`. Bin `k` covers
+  the half-open lag interval `[(k - n - 0.5) * bin_width, (k - n + 0.5) * bin_width)`, so the
+  central bin (index `n`) is centered on lag zero. Counts are ordered most-negative lag first.
+  The sign convention is `target - reference`, so `cross_correlogram(a, b)` reversed equals
+  `cross_correlogram(b, a)`.
+- `autocorrelogram(spikes, *, bin_width, max_lag) -> list[int]`: binned autocorrelogram (ACG),
+  the CCG of a train with itself on the same bin grid. The trivial zero-lag self-pairs
+  `i == i` are excluded, so the central bin counts only genuine pairs of distinct spikes. The
+  ACG is symmetric by construction.
 
 ### Time-resolved metrics
 
@@ -140,6 +160,13 @@ Parameters after `*` are keyword-only and have no default values; pass them expl
   `[start, end]`; a spike outside raises a `ValueError`. Following the Cutts and Eglen
   convention, when a denominator `1 - P * T` is zero (for example when `dt` is large enough that
   the tiling saturates to 1), that half of the STTC contributes 0. An empty train gives 0.0.
+- `cross_correlogram` and `autocorrelogram` use symmetric bins centered on lag zero:
+  `n = ceil(max_lag / bin_width)` bins on each side give an odd `2 * n + 1` bins, with the
+  central bin covering `[-bin_width / 2, +bin_width / 2)`. A lag is counted when it falls in
+  the grid, `[-(n + 0.5) * bin_width, +(n + 0.5) * bin_width)`, which always covers at least
+  `[-max_lag, max_lag]`. `bin_width` and `max_lag` must be positive and `max_lag` must be at
+  least one `bin_width`, otherwise a `ValueError` is raised. The ACG excludes the `i == i`
+  self-pairs and is symmetric.
 
 ## License
 

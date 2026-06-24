@@ -4,6 +4,8 @@ import random
 import pytest
 
 from spikestats import (
+    autocorrelogram,
+    cross_correlogram,
     cv2,
     cv_isi,
     fano_factor,
@@ -201,6 +203,123 @@ class TestSpikeTimeTilingCoefficient:
     def test_spike_outside_interval_raises(self) -> None:
         with pytest.raises(ValueError, match="outside the recording interval"):
             spike_time_tiling_coefficient([11.0], [2.0], dt=0.5, interval=(0.0, 10.0))
+
+
+class TestCrossCorrelogram:
+    def test_worked_example(self) -> None:
+        # reference = [0.0], target = [0.005, 0.012], bin_width = 0.005, max_lag = 0.02.
+        # n = ceil(0.02 / 0.005) = 4, so 2*4+1 = 9 bins, center index 4 (lag 0).
+        # Bin k covers [(k - 4 - 0.5)*0.005, (k - 4 + 0.5)*0.005).
+        # Lag 0.005 -> floor(0.005/0.005 + 0.5) + 4 = floor(1.5) + 4 = 5;
+        #   bin 5 covers [0.0025, 0.0075), holds 0.005.
+        # Lag 0.012 -> floor(0.012/0.005 + 0.5) + 4 = floor(2.9) + 4 = 6;
+        #   bin 6 covers [0.0075, 0.0125), holds 0.012.
+        assert cross_correlogram(
+            [0.0], [0.005, 0.012], bin_width=0.005, max_lag=0.02
+        ) == [0, 0, 0, 0, 0, 1, 1, 0, 0]
+
+    def test_length_is_odd_two_n_plus_one(self) -> None:
+        # n = ceil(0.05 / 0.01) = 5 => 11 bins.
+        result = cross_correlogram([0.0], [0.0], bin_width=0.01, max_lag=0.05)
+        assert len(result) == 11
+
+    def test_self_pair_lands_in_central_bin(self) -> None:
+        # reference == target single spike: the only pair has lag 0, central bin (index n).
+        result = cross_correlogram([1.0], [1.0], bin_width=0.01, max_lag=0.05)
+        center = len(result) // 2
+        assert result[center] == 1
+        assert sum(result) == 1
+
+    def test_constant_shift_concentrates_in_one_bin(self) -> None:
+        # b is a copy of a shifted by delta = 0.03. With bin_width = 0.01 and max_lag = 0.05
+        # (n = 5, 11 bins, center index 5), only the three same-index pairs have lag 0.03;
+        # the cross-index lags (0.03 +/- 0.1, ...) fall outside the +/- 0.055 grid.
+        # Lag 0.03 -> floor(0.03/0.01 + 0.5) + 5 = floor(3.5) + 5 = 8.
+        a = [0.0, 0.1, 0.2]
+        b = [0.03, 0.13, 0.23]
+        result = cross_correlogram(a, b, bin_width=0.01, max_lag=0.05)
+        expected = [0] * 11
+        expected[8] = 3
+        assert result == expected
+
+    def test_symmetry_reversed(self) -> None:
+        # cross_correlogram(a, b) reversed equals cross_correlogram(b, a): the sign
+        # convention is target - reference, so swapping the arguments negates every lag.
+        a = [0.0, 0.013, 0.041, 0.072]
+        b = [0.004, 0.020, 0.055]
+        ab = cross_correlogram(a, b, bin_width=0.005, max_lag=0.05)
+        ba = cross_correlogram(b, a, bin_width=0.005, max_lag=0.05)
+        assert ab == list(reversed(ba))
+
+    def test_empty_train_all_zeros(self) -> None:
+        result = cross_correlogram([], [1.0, 2.0], bin_width=0.5, max_lag=2.0)
+        assert result == [0] * len(result)
+        assert sum(result) == 0
+
+    def test_non_positive_bin_width_raises(self) -> None:
+        with pytest.raises(ValueError, match="bin_width"):
+            cross_correlogram([0.0], [0.0], bin_width=0.0, max_lag=0.05)
+
+    def test_non_positive_max_lag_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_lag"):
+            cross_correlogram([0.0], [0.0], bin_width=0.01, max_lag=0.0)
+
+    def test_max_lag_below_bin_width_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_lag"):
+            cross_correlogram([0.0], [0.0], bin_width=0.05, max_lag=0.01)
+
+
+class TestAutocorrelogram:
+    def test_regular_train_peaks_at_isi_multiples(self) -> None:
+        # Regular train at ISI = 0.01, five spikes. bin_width = 0.01, max_lag = 0.03 =>
+        # n = 3, 7 bins, center index 3 (lag 0). Ordered distinct pairs have lags that are
+        # integer multiples of 0.01, with index = (j - i) + 3:
+        #   j - i = +/-1 -> 4 pairs each (bins 4 and 2),
+        #   j - i = +/-2 -> 3 pairs each (bins 5 and 1),
+        #   j - i = +/-3 -> 2 pairs each (bins 6 and 0),
+        #   j - i = +/-4 -> outside the grid, dropped.
+        # The central bin (lag 0) is 0 because i == i self-pairs are excluded and no two
+        # distinct spikes lie within half a bin of lag 0.
+        spikes = [0.0, 0.01, 0.02, 0.03, 0.04]
+        assert autocorrelogram(spikes, bin_width=0.01, max_lag=0.03) == [2, 3, 4, 0, 4, 3, 2]
+
+    def test_central_bin_excludes_self_pairs(self) -> None:
+        # Two distinct spikes 0.001 apart, smaller than half a 0.01 bin, both land at lag 0;
+        # but the self-pairs are excluded, so the central bin counts the two ordered pairs
+        # of distinct spikes (0->1 and 1->0), not the two self coincidences.
+        result = autocorrelogram([0.0, 0.001], bin_width=0.01, max_lag=0.05)
+        center = len(result) // 2
+        assert result[center] == 2
+        assert sum(result) == 2
+
+    def test_is_symmetric(self) -> None:
+        # The ACG is symmetric because every ordered pair (i, j) has a mirror (j, i) of the
+        # opposite lag.
+        spikes = [0.0, 0.007, 0.018, 0.040, 0.041, 0.090]
+        acg = autocorrelogram(spikes, bin_width=0.005, max_lag=0.05)
+        assert acg == list(reversed(acg))
+
+    def test_fewer_than_two_spikes_all_zeros(self) -> None:
+        assert autocorrelogram([], bin_width=0.01, max_lag=0.05) == [0] * 11
+        assert autocorrelogram([1.0], bin_width=0.01, max_lag=0.05) == [0] * 11
+
+    def test_matches_cross_correlogram_minus_self_pairs(self) -> None:
+        # The ACG equals the CCG of the train with itself, minus the N self-pairs that all
+        # land in the central bin.
+        spikes = [0.0, 0.012, 0.033, 0.071]
+        acg = autocorrelogram(spikes, bin_width=0.005, max_lag=0.05)
+        ccg = cross_correlogram(spikes, spikes, bin_width=0.005, max_lag=0.05)
+        center = len(ccg) // 2
+        ccg[center] -= len(spikes)
+        assert acg == ccg
+
+    def test_non_positive_bin_width_raises(self) -> None:
+        with pytest.raises(ValueError, match="bin_width"):
+            autocorrelogram([0.0, 1.0], bin_width=0.0, max_lag=0.05)
+
+    def test_max_lag_below_bin_width_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_lag"):
+            autocorrelogram([0.0, 1.0], bin_width=0.05, max_lag=0.01)
 
 
 class TestPoissonAsymptotics:

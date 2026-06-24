@@ -1,6 +1,8 @@
 """Spike-train statistics in pure Python with zero dependencies."""
 
 from .metrics import (
+    autocorrelogram,
+    cross_correlogram,
     cv2,
     cv_isi,
     fano_factor,
@@ -19,7 +21,9 @@ from .time_resolved import (
 )
 
 __all__ = [
+    "autocorrelogram",
     "binned_spike_counts",
+    "cross_correlogram",
     "cv2",
     "cv_isi",
     "fano_factor",
@@ -33,4 +37,4 @@ __all__ = [
     "time_resolved_fano",
     "time_resolved_rate",
 ]
-__version__ = "0.3.0"
+__version__ = "0.4.0"
